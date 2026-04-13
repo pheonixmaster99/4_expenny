@@ -1,5 +1,6 @@
 'use client'
 
+import AiImportReview from "@/components/AiImportReview"
 import DashboardToolbar from "@/components/DashboardToolbar"
 import Login from "@/components/Login"
 import SubscriptionForm from "@/components/SubscriptionForm"
@@ -13,8 +14,10 @@ import {
     emptySubscription,
     filterSubscriptions,
     getUpcomingBills,
+    mergeUniqueSubscriptions,
     normalizeSubscription,
     parseCsvSubscriptions,
+    pickSubscriptionFields,
     sortSubscriptions,
 } from "@/utils"
 import { useEffect, useRef, useState } from "react"
@@ -34,6 +37,10 @@ export default function DashboardPage() {
     const [formData, setFormData] = useState(emptySubscription)
     const [filters, setFilters] = useState(defaultFilters)
     const [toastMessage, setToastMessage] = useState("")
+    const [importMode, setImportMode] = useState("standard")
+    const [importStrategy, setImportStrategy] = useState("append")
+    const [isAiImporting, setIsAiImporting] = useState(false)
+    const [aiImportPreview, setAiImportPreview] = useState(null)
     const fileInputRef = useRef(null)
     const isAuthenticated = !!currentUser
     const subscriptions = userData?.subscriptions || []
@@ -124,6 +131,19 @@ export default function DashboardPage() {
         setToastMessage("CSV export is ready.")
     }
 
+    function getImportSuccessMessage(importedCount, totalCountAfterImport) {
+        // The wording changes so the toast reflects the user's chosen import behavior.
+        if (importStrategy === "replace") {
+            return `Replaced your subscriptions with ${importedCount} imported rows.`
+        }
+
+        if (importStrategy === "unique") {
+            return `Imported ${importedCount} new rows. You now have ${totalCountAfterImport} subscriptions.`
+        }
+
+        return `Appended ${importedCount} rows. You now have ${totalCountAfterImport} subscriptions.`
+    }
+
     async function handleImportFile(e) {
         const file = e.target.files?.[0]
 
@@ -132,6 +152,45 @@ export default function DashboardPage() {
         }
 
         const text = await file.text()
+        if (importMode === "ai") {
+            try {
+                setIsAiImporting(true)
+                // Smart import sends the messy CSV to our backend cleaner first,
+                // then shows a review screen before anything is saved.
+                const response = await fetch("/api/import/smart", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                    },
+                    body: JSON.stringify({ csvText: text }),
+                })
+
+                const rawResponse = await response.text()
+                let payload = null
+
+                try {
+                    payload = rawResponse ? JSON.parse(rawResponse) : null
+                } catch {
+                    payload = { error: rawResponse || "Smart import failed." }
+                }
+
+                if (!response.ok) {
+                    setToastMessage(payload.error || "Smart import failed.")
+                    return
+                }
+
+                setAiImportPreview(payload)
+                setToastMessage("Smart import review is ready.")
+                return
+            } catch (error) {
+                setToastMessage(error.message || "Smart import failed.")
+                return
+            } finally {
+                setIsAiImporting(false)
+                e.target.value = ""
+            }
+        }
+
         const importedSubscriptions = parseCsvSubscriptions(text)
 
         if (!importedSubscriptions.length) {
@@ -139,10 +198,65 @@ export default function DashboardPage() {
             return
         }
 
-        await handleReplaceSubscriptions([...subscriptions, ...importedSubscriptions])
-        setToastMessage(`Imported ${importedSubscriptions.length} subscriptions.`)
+        // Standard CSV import can still follow the same append/replace/unique rules as smart import.
+        const nextSubscriptions =
+            importStrategy === "replace"
+                ? importedSubscriptions
+                : importStrategy === "unique"
+                  ? mergeUniqueSubscriptions(subscriptions, importedSubscriptions)
+                  : [...subscriptions, ...importedSubscriptions]
+
+        await handleReplaceSubscriptions(nextSubscriptions)
+        const importedCount =
+            importStrategy === "unique"
+                ? nextSubscriptions.length - subscriptions.length
+                : importedSubscriptions.length
+
+        setToastMessage(getImportSuccessMessage(importedCount, nextSubscriptions.length))
         // Allow importing the same file again without forcing the user to rename it first.
         e.target.value = ""
+    }
+
+    async function handleImportReviewedSubscriptions(reviewedSubscriptions) {
+        // Review rows include UI-only fields like confidence/errors/ignored,
+        // so trim them back down to pure subscription fields before saving.
+        const cleanedSubscriptions = reviewedSubscriptions.map((subscription) => pickSubscriptionFields(subscription))
+        const nextSubscriptions =
+            importStrategy === "replace"
+                ? cleanedSubscriptions
+                : importStrategy === "unique"
+                  ? mergeUniqueSubscriptions(subscriptions, cleanedSubscriptions)
+                  : [...subscriptions, ...cleanedSubscriptions]
+
+        await handleReplaceSubscriptions(nextSubscriptions)
+        setAiImportPreview(null)
+        const importedCount =
+            importStrategy === "unique"
+                ? nextSubscriptions.length - subscriptions.length
+                : cleanedSubscriptions.length
+
+        setToastMessage(getImportSuccessMessage(importedCount, nextSubscriptions.length))
+    }
+
+    function handleIgnorePreviewRow(subscriptionId) {
+        setAiImportPreview((previous) => {
+            if (!previous) {
+                return previous
+            }
+
+            // Ignoring does not delete the preview row forever;
+            // it only hides it from the current import session.
+            const nextSubscriptions = previous.subscriptions.map((subscription) =>
+                subscription.id === subscriptionId ? { ...subscription, ignored: true } : subscription
+            )
+
+            return {
+                ...previous,
+                subscriptions: nextSubscriptions,
+                validCount: nextSubscriptions.filter((subscription) => subscription.isValid && !subscription.ignored).length,
+                invalidCount: nextSubscriptions.filter((subscription) => !subscription.isValid && !subscription.ignored).length,
+            }
+        })
     }
 
     if (loading) {
@@ -175,12 +289,38 @@ export default function DashboardPage() {
                 onFilterChange={handleFilterChange}
                 onClearFilters={() => setFilters(defaultFilters)}
                 onExport={handleExport}
-                onImportClick={() => fileInputRef.current?.click()}
+                onImportClick={() => {
+                    setImportMode("standard")
+                    fileInputRef.current?.click()
+                }}
+                onAiImportClick={() => {
+                    setImportMode("ai")
+                    fileInputRef.current?.click()
+                }}
                 onAdd={() => {
                     setFormData(emptySubscription)
                     setIsAddEntry(true)
                 }}
+                isAiImporting={isAiImporting}
+                importStrategy={importStrategy}
+                onImportStrategyChange={setImportStrategy}
             />
+
+            {aiImportPreview && (
+                <AiImportReview
+                    preview={aiImportPreview}
+                    onCancel={() => setAiImportPreview(null)}
+                    onImport={handleImportReviewedSubscriptions}
+                    onIgnoreRow={handleIgnorePreviewRow}
+                    importStrategyLabel={
+                        importStrategy === "replace"
+                            ? "Replace with"
+                            : importStrategy === "unique"
+                              ? "Import"
+                              : "Import"
+                    }
+                />
+            )}
 
             <SubscriptionSummary subscriptions={subscriptions} />
             <UpcomingBills subscriptions={upcomingBills} />

@@ -6,7 +6,7 @@ import {
 } from "@/utils"
 
 export default function DashboardToolbar(props) {
-    const { filters, onFilterChange, onClearFilters, onExport, onImportClick, onAdd } = props
+    const { filters, onFilterChange, onClearFilters, onExport, onImportClick, onAiImportClick, onAdd, isAiImporting, importStrategy, onImportStrategyChange } = props
 
     return (
         <section className="card toolbar-shell">
@@ -17,6 +17,9 @@ export default function DashboardToolbar(props) {
                 </div>
                 <div className="toolbar-actions">
                     <button onClick={onImportClick}>Import CSV</button>
+                    <button onClick={onAiImportClick} disabled={isAiImporting}>
+                        {isAiImporting ? "Cleaning..." : "Smart Clean CSV"}
+                    </button>
                     <button onClick={onExport}>Export CSV</button>
                     <button onClick={onAdd}>Add subscription</button>
                 </div>
@@ -73,6 +76,15 @@ export default function DashboardToolbar(props) {
                                 {option.label}
                             </option>
                         ))}
+                    </select>
+                </label>
+
+                <label>
+                    <span>Import behavior</span>
+                    <select value={importStrategy} onChange={(e) => onImportStrategyChange(e.target.value)}>
+                        <option value="append">Append to existing</option>
+                        <option value="replace">Replace all</option>
+                        <option value="unique">Import only new rows</option>
                     </select>
                 </label>
 

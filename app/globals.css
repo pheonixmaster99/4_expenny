@@ -262,6 +262,49 @@ section {
   gap: 0.75rem;
 }
 
+.ai-review-shell,
+.ai-warning-list,
+.ai-review-list,
+.ai-error-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.ai-review-shell,
+.ai-review-list {
+  gap: 1rem;
+}
+
+.ai-warning-list,
+.ai-error-list {
+  gap: 0.5rem;
+}
+
+.ai-warning-list p,
+.ai-error-list p {
+  width: 100%;
+  padding: 0.75rem 1rem;
+  border-radius: var(--border-radius-small);
+}
+
+.ai-warning-list p {
+  background: rgba(250, 204, 21, 0.15);
+}
+
+.ai-error-list p {
+  background: rgba(239, 68, 68, 0.12);
+}
+
+.ai-review-meta {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.ai-review-card {
+  gap: 1rem;
+}
+
 .upcoming-row {
   display: flex;
   justify-content: space-between;

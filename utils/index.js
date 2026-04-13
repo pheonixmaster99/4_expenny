@@ -43,6 +43,21 @@ export const emptySubscription = {
     updatedAt: "",
 }
 
+export const SUBSCRIPTION_FIELDS = [
+    "name",
+    "category",
+    "cost",
+    "currency",
+    "billingFrequency",
+    "paymentMethod",
+    "startDate",
+    "renewalType",
+    "trialEndDate",
+    "status",
+    "alertBeforeDays",
+    "notes",
+]
+
 export function createSubscriptionId() {
     // Firestore can store arrays of plain objects, so we generate ids ourselves for stable edit/delete behavior.
     return `sub_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
@@ -75,6 +90,73 @@ export function normalizeSubscription(subscription = {}) {
 
 export function normalizeSubscriptions(subscriptions = []) {
     return subscriptions.map(normalizeSubscription)
+}
+
+export function pickSubscriptionFields(subscription = {}) {
+    // Keep only the fields that belong in saved/exported subscription data.
+    // This drops review-only values like confidence, errors, and ignored.
+    return SUBSCRIPTION_FIELDS.reduce((accumulator, field) => {
+        accumulator[field] = subscription[field] ?? emptySubscription[field] ?? ""
+        return accumulator
+    }, {})
+}
+
+export function isValidDateString(value) {
+    if (!value) {
+        return false
+    }
+
+    return /^\d{4}-\d{2}-\d{2}$/.test(value)
+}
+
+export function validateSubscriptionRecord(subscription = {}) {
+    const errors = []
+    const cost = Number(subscription.cost)
+
+    if (!subscription.name?.trim()) {
+        errors.push("Missing subscription name")
+    }
+
+    if (!CATEGORY_OPTIONS.includes(subscription.category)) {
+        errors.push("Unknown category")
+    }
+
+    if (!Number.isFinite(cost) || cost < 0) {
+        errors.push("Invalid cost")
+    }
+
+    if (!CURRENCY_OPTIONS.includes(subscription.currency)) {
+        errors.push("Unknown currency")
+    }
+
+    if (!BILLING_FREQUENCY_OPTIONS.includes(subscription.billingFrequency)) {
+        errors.push("Unknown billing frequency")
+    }
+
+    if (!PAYMENT_METHOD_OPTIONS.includes(subscription.paymentMethod)) {
+        errors.push("Unknown payment method")
+    }
+
+    if (!STATUS_OPTIONS.includes(subscription.status)) {
+        errors.push("Unknown status")
+    }
+
+    if (!RENEWAL_OPTIONS.includes(subscription.renewalType)) {
+        errors.push("Unknown renewal type")
+    }
+
+    if (!isValidDateString(subscription.startDate)) {
+        errors.push("Missing or invalid start date")
+    }
+
+    if (subscription.trialEndDate && !isValidDateString(subscription.trialEndDate)) {
+        errors.push("Invalid trial end date")
+    }
+
+    return {
+        isValid: errors.length === 0,
+        errors,
+    }
 }
 
 export function formatCurrency(value, currency = "USD") {
@@ -364,21 +446,14 @@ export function parseCsvSubscriptions(csvText = "") {
         })
 }
 
+export function parseCsvRows(csvText = "") {
+    const rows = csvText.trim().split(/\r?\n/).filter(Boolean)
+
+    return rows.map((row) => row.match(/(".*?"|[^",]+)(?=\s*,|\s*$)/g)?.map((value) => value.replace(/^"|"$/g, "").replace(/""/g, '"')) || [])
+}
+
 export function convertSubscriptionsToCsv(subscriptions = []) {
-    const headers = [
-        "name",
-        "category",
-        "cost",
-        "currency",
-        "billingFrequency",
-        "paymentMethod",
-        "startDate",
-        "renewalType",
-        "trialEndDate",
-        "status",
-        "alertBeforeDays",
-        "notes",
-    ]
+    const headers = SUBSCRIPTION_FIELDS
 
     const escapeValue = (value) => `"${String(value ?? "").replace(/"/g, '""')}"`
 
@@ -387,4 +462,31 @@ export function convertSubscriptionsToCsv(subscriptions = []) {
     )
 
     return [headers.join(","), ...lines].join("\n")
+}
+
+export function mergeUniqueSubscriptions(existingSubscriptions = [], importedSubscriptions = []) {
+    // Build a lightweight identity key so we can skip obvious duplicates during import.
+    const existingKeys = new Set(
+        existingSubscriptions.map((subscription) =>
+            [
+                subscription.name?.trim().toLowerCase(),
+                subscription.cost,
+                subscription.billingFrequency,
+                subscription.startDate,
+            ].join("|")
+        )
+    )
+
+    const uniqueImports = importedSubscriptions.filter((subscription) => {
+        const key = [
+            subscription.name?.trim().toLowerCase(),
+            subscription.cost,
+            subscription.billingFrequency,
+            subscription.startDate,
+        ].join("|")
+
+        return !existingKeys.has(key)
+    })
+
+    return [...existingSubscriptions, ...uniqueImports]
 }
