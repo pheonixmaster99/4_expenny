@@ -39,6 +39,7 @@ Expenny lets a user:
 ### Data Tools
 
 - CSV import
+- free smart CSV cleanup for messy imports
 - CSV export
 - sample CSV data in `public/sample-subscriptions.csv`
 
@@ -176,6 +177,26 @@ This sample file includes:
 - cancelled subscriptions
 - yearly and monthly billing
 - a trial subscription
+
+## Smart CSV Cleanup
+
+Expenny now includes a free smart import flow for messy CSV files.
+
+Use the `Smart Clean CSV` button when:
+
+- the column names do not match the app schema
+- the file contains unclear or mixed subscription fields
+- you want the app to infer categories, billing frequency, or other missing values
+
+The smart import flow:
+
+1. uploads the raw CSV to a backend route
+2. uses built-in rules to map common headers and normalize values
+3. validates the cleaned result on the server
+4. shows a review screen before anything is saved
+5. lets the user ignore rows that should not be imported
+
+This keeps the feature free while still handling many real-world CSV mistakes.
 
 ## Recent Upgrades
 

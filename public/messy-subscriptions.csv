@@ -1,0 +1,11 @@
+service,amount,billed_every,pay_source,started_on,current_state,extra_notes
+Netflix Premium,22.99,monthly,Visa,2025-02-14,active,Family plan used every weekend
+Spotify Family,17.99,month,PayPal,2024-08-01,active,Music subscription
+Adobe CC,59.99,monthly,Mastercard,2025-01-10,active,Design tools for freelance work
+Amazon Prime,139,annual,credit card,2024-11-21,active,Shipping and streaming
+Dropbox,19.99,monthly,bank,2025-01-22,manual renewal,Storage for clients
+Figma Pro,15,trial ending soon,visa,2026-04-01,trial,Testing collaborative design tools
+Gym Membership,49.99,every month,debit,2024-10-01,paused,Paused due to injury
+Disney+,15.99,monthly,credit card,2025-03-12,cancelled,Stopped after price increase
+Duolingo Super,83.99,yearly,PayPal,2024-12-05,active,Language learning app
+Random Coffee Shop,8.50,one time,Apple Pay,2026-04-10,paid,Clearly not a subscription and should ideally be ignored
