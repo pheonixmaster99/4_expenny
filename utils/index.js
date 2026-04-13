@@ -1,265 +1,390 @@
-export const calculateSubscriptionMetrics = (subscriptions) => {
-    // Filter active subscriptions
-    const active_subscriptions = subscriptions.filter(sub => sub.status === "Active");
+const DAY_IN_MS = 1000 * 60 * 60 * 24
 
-    // Initialize metrics
-    let total_monthly_cost = 0;
-    let total_yearly_cost = 0;
-    let category_spending = {};
-    let upcoming_billing_count = 0;
-    let most_expensive_subscription = null;
+export const CATEGORY_OPTIONS = [
+    "Entertainment",
+    "Music",
+    "Software",
+    "Web Services",
+    "Health & Fitness",
+    "Productivity",
+    "Shopping",
+    "Education",
+    "Other",
+]
 
-    const today = new Date();
-    const next_week = new Date();
-    next_week.setDate(today.getDate() + 7);
+export const CURRENCY_OPTIONS = ["USD", "CAD", "EUR", "GBP", "AUD", "NZD", "Other"]
+export const BILLING_FREQUENCY_OPTIONS = ["Monthly", "Yearly", "Quarterly", "One-time"]
+export const PAYMENT_METHOD_OPTIONS = ["Credit Card", "Debit Card", "Paypal", "Bank Transfer", "Cash", "Other"]
+export const STATUS_OPTIONS = ["Active", "Paused", "Cancelled"]
+export const RENEWAL_OPTIONS = ["Automatic", "Manual", "Trial"]
+export const SORT_OPTIONS = [
+    { value: "nextCharge", label: "Next charge" },
+    { value: "highestCost", label: "Highest cost" },
+    { value: "lowestCost", label: "Lowest cost" },
+    { value: "name", label: "Name" },
+    { value: "recentlyAdded", label: "Recently added" },
+]
 
-    active_subscriptions.forEach(sub => {
-        // Ensure numeric values are properly parsed
-        const cost = parseFloat(sub.cost) || 0;
-        const billingFrequency = sub.billingFrequency;
+export const emptySubscription = {
+    id: "",
+    name: "",
+    category: "Web Services",
+    cost: "",
+    currency: "USD",
+    billingFrequency: "Monthly",
+    paymentMethod: "Credit Card",
+    startDate: "",
+    renewalType: "Automatic",
+    trialEndDate: "",
+    notes: "",
+    status: "Active",
+    alertBeforeDays: "3",
+    createdAt: "",
+    updatedAt: "",
+}
 
-        const monthly_cost = billingFrequency === "Yearly" ? cost / 12 : cost;
-        total_monthly_cost += monthly_cost;
-        total_yearly_cost += billingFrequency === "Yearly" ? cost : cost * 12;
+export function createSubscriptionId() {
+    // Firestore can store arrays of plain objects, so we generate ids ourselves for stable edit/delete behavior.
+    return `sub_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
+}
 
-        // Track category spending
-        if (!category_spending[sub.category]) {
-            category_spending[sub.category] = 0;
-        }
-        category_spending[sub.category] += cost;
+export function normalizeSubscription(subscription = {}) {
+    const timestamp = new Date().toISOString()
 
-        // Determine most expensive subscription
-        if (!most_expensive_subscription || cost > most_expensive_subscription.cost) {
-            most_expensive_subscription = sub;
-        }
-
-        // Calculate next billing date
-        const start_date = new Date(sub.startDate);
-        let next_billing_date = new Date(start_date);
-        while (next_billing_date < today) {
-            if (billingFrequency === "Monthly") {
-                next_billing_date.setMonth(next_billing_date.getMonth() + 1);
-            } else if (billingFrequency === "Yearly") {
-                next_billing_date.setFullYear(next_billing_date.getFullYear() + 1);
-            }
-        }
-
-        // Count upcoming billing within the next 7 days
-        if (next_billing_date >= today && next_billing_date <= next_week) {
-            upcoming_billing_count++;
-        }
-    });
-
-    // Calculate average monthly spending
-    const average_monthly_spending = active_subscriptions.length > 0 ? total_monthly_cost / active_subscriptions.length : 0;
-
-    // Find the top spending category
-    let top_spending_category = Object.entries(category_spending).reduce((top, current) => current[1] > top[1] ? current : top, ["", 0])[0] || "None";
-
+    // Normalization gives every record the same shape so the UI does not have to guard every field manually.
     return {
-        total_monthly_cost: total_monthly_cost.toFixed(2),
-        total_yearly_cost: total_yearly_cost.toFixed(2),
-        average_monthly_spending: average_monthly_spending.toFixed(2),
-        active_subscriptions: active_subscriptions.length,
-        top_spending_category,
-        upcoming_billing_count,
-        most_expensive_subscription: most_expensive_subscription ? most_expensive_subscription.name : "None"
-    };
-};
+        ...emptySubscription,
+        ...subscription,
+        id: subscription.id || createSubscriptionId(),
+        name: subscription.name?.trim() || "",
+        category: subscription.category || emptySubscription.category,
+        cost: subscription.cost === 0 ? "0" : String(subscription.cost || ""),
+        currency: subscription.currency || emptySubscription.currency,
+        billingFrequency: subscription.billingFrequency || emptySubscription.billingFrequency,
+        paymentMethod: subscription.paymentMethod || emptySubscription.paymentMethod,
+        startDate: subscription.startDate || "",
+        renewalType: subscription.renewalType || emptySubscription.renewalType,
+        trialEndDate: subscription.trialEndDate || "",
+        notes: subscription.notes?.trim() || "",
+        status: subscription.status || emptySubscription.status,
+        alertBeforeDays: String(subscription.alertBeforeDays || emptySubscription.alertBeforeDays),
+        createdAt: subscription.createdAt || timestamp,
+        updatedAt: timestamp,
+    }
+}
 
+export function normalizeSubscriptions(subscriptions = []) {
+    return subscriptions.map(normalizeSubscription)
+}
 
-// export const calculateSubscriptionMetrics = (subscriptions) => {
-//     // Filter active subscriptions
-//     const active_subscriptions = subscriptions.filter(sub => sub.status === "Active")
+export function formatCurrency(value, currency = "USD") {
+    const amount = Number(value) || 0
 
-//     // Calculate total monthly and yearly costs
-//     let total_monthly_cost = 0
-//     let total_yearly_cost = 0
-//     let category_spending = {}
-//     let upcoming_billing_count = 0
-//     let most_expensive_subscription = null
+    try {
+        return new Intl.NumberFormat("en-US", {
+            style: "currency",
+            currency: currency === "Other" ? "USD" : currency,
+            maximumFractionDigits: 2,
+        }).format(amount)
+    } catch {
+        return `$${amount.toFixed(2)}`
+    }
+}
 
-//     const today = new Date()
-//     const next_week = new Date()
-//     next_week.setDate(today.getDate() + 7)
+export function formatDate(dateInput) {
+    if (!dateInput) {
+        return "Not set"
+    }
 
-//     active_subscriptions.forEach(sub => {
-//         const monthly_cost = sub.billingFrequency === "Yearly" ? sub.cost / 12 : sub.cost
-//         total_monthly_cost += monthly_cost
-//         total_yearly_cost += sub.billingFrequency === "Yearly" ? sub.cost : sub.cost * 12
+    const date =
+        dateInput instanceof Date
+            ? dateInput
+            : String(dateInput).includes("T")
+              ? new Date(dateInput)
+              : new Date(`${dateInput}T00:00:00`)
 
-//         // Track category spending
-//         if (!category_spending[sub.category]) {
-//             category_spending[sub.category] = 0
-//         }
-//         category_spending[sub.category] += sub.cost
+    if (Number.isNaN(date.getTime())) {
+        return "Not set"
+    }
 
-//         // Determine most expensive subscription
-//         if (!most_expensive_subscription || sub.cost > most_expensive_subscription.cost) {
-//             most_expensive_subscription = sub
-//         }
+    return new Intl.DateTimeFormat("en-CA", {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+    }).format(date)
+}
 
-//         // Calculate next billing date
-//         const start_date = new Date(sub.startDate)
-//         let next_billing_date = new Date(start_date)
-//         while (next_billing_date < today) {
-//             if (sub.billingFrequency === "Monthly") {
-//                 next_billing_date.setMonth(next_billing_date.getMonth() + 1)
-//             } else if (sub.billingFrequency === "Yearly") {
-//                 next_billing_date.setFullYear(next_billing_date.getFullYear() + 1)
-//             }
-//         }
+export function getBillingCycleMonths(billingFrequency) {
+    switch (billingFrequency) {
+        case "Yearly":
+            return 12
+        case "Quarterly":
+            return 3
+        case "One-time":
+            return null
+        case "Monthly":
+        default:
+            return 1
+    }
+}
 
-//         // Count upcoming billing within the next 7 days
-//         if (next_billing_date >= today && next_billing_date <= next_week) {
-//             upcoming_billing_count++
-//         }
-//     })
+export function getMonthlyCost(subscription) {
+    const amount = Number(subscription.cost) || 0
 
-//     // Calculate average monthly spending
-//     const average_monthly_spending = active_subscriptions.length > 0 ? total_monthly_cost / active_subscriptions.length : 0
+    // Convert everything into a monthly equivalent so mixed billing plans can be compared fairly.
+    switch (subscription.billingFrequency) {
+        case "Yearly":
+            return amount / 12
+        case "Quarterly":
+            return amount / 3
+        case "One-time":
+            return 0
+        case "Monthly":
+        default:
+            return amount
+    }
+}
 
-//     // Find the top spending category
-//     let top_spending_category = Object.entries(category_spending).reduce((top, current) => current[1] > top[1] ? current : top, ["", 0])[0] || "None"
+export function getYearlyCost(subscription) {
+    const amount = Number(subscription.cost) || 0
 
-//     return {
-//         total_monthly_cost: total_monthly_cost.toFixed(2),
-//         total_yearly_cost: total_yearly_cost.toFixed(2),
-//         average_monthly_spending: average_monthly_spending.toFixed(2),
-//         active_subscriptions: active_subscriptions.length,
-//         top_spending_category,
-//         upcoming_billing_count,
-//         most_expensive_subscription: most_expensive_subscription ? most_expensive_subscription.name : "None"
-//     }
-// }
+    switch (subscription.billingFrequency) {
+        case "Yearly":
+            return amount
+        case "Quarterly":
+            return amount * 4
+        case "One-time":
+            return amount
+        case "Monthly":
+        default:
+            return amount * 12
+    }
+}
 
-// Example usage
-// console.log(calculateSubscriptionMetrics(subscriptions))
+export function getNextBillingDate(startDate, billingFrequency) {
+    if (!startDate) {
+        return null
+    }
 
+    if (billingFrequency === "One-time") {
+        return null
+    }
 
-// Helper function to format object keys into readable labels
-export const formatKey = (key) => {
-    return key
-        .replace(/([A-Z])/g, " $1") // Add space before capital letters
-        .replace(/^./, (str) => str.toUpperCase()) // Capitalize first letter
-        .replace("Upcoming Billing Dates", "Upcoming Bills (Next 7 Days)")
-        .replace("Trial Ending Soon", "Trials Ending Soon")
+    const cycleMonths = getBillingCycleMonths(billingFrequency)
+    const today = new Date()
+    const start = new Date(`${startDate}T00:00:00`)
+
+    if (Number.isNaN(start.getTime()) || cycleMonths === null) {
+        return null
+    }
+
+    const nextBillingDate = new Date(start)
+
+    // Walk forward one billing cycle at a time until we land on the next future charge.
+    while (nextBillingDate <= today) {
+        nextBillingDate.setMonth(nextBillingDate.getMonth() + cycleMonths)
+    }
+
+    return nextBillingDate
 }
 
 export function getDaysUntilNextCharge(startDate, billingFrequency) {
-    const start = new Date(startDate)
-    const today = new Date()
+    const nextBillingDate = getNextBillingDate(startDate, billingFrequency)
 
-    let nextBillingDate = new Date(start)
-
-    if (billingFrequency === "Monthly") {
-        // Add months until next charge is in the future
-        while (nextBillingDate <= today) {
-            nextBillingDate.setMonth(nextBillingDate.getMonth() + 1)
-        }
-    } else if (billingFrequency === "Yearly") {
-        // Add years until next charge is in the future
-        while (nextBillingDate <= today) {
-            nextBillingDate.setFullYear(nextBillingDate.getFullYear() + 1)
-        }
-    } else if (billingFrequency === "Quarterly") {
-        // Add quarters (3 months)
-        while (nextBillingDate <= today) {
-            nextBillingDate.setMonth(nextBillingDate.getMonth() + 3)
-        }
-    } else if (billingFrequency === "One-time") {
-        // No recurring charges
-        return "No upcoming charges"
+    if (!nextBillingDate) {
+        return "No upcoming charge"
     }
 
-    // Calculate the number of days until next charge
-    const diffTime = nextBillingDate - today
-    const daysUntilNextCharge = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
-
-    return daysUntilNextCharge
+    return Math.ceil((nextBillingDate.getTime() - Date.now()) / DAY_IN_MS)
 }
 
-// Example Usage
-// console.log(getDaysUntilNextCharge("2024-02-01", "Monthly"))  // Example output: 30
+export function getTrialDaysRemaining(trialEndDate) {
+    if (!trialEndDate) {
+        return null
+    }
 
+    const trialDate = new Date(`${trialEndDate}T00:00:00`)
 
-export const subscriptions = [
-    {
-        id: 1,
-        name: "Netflix",
-        category: "Entertainment",
-        cost: 15.99, // Monthly cost in USD
-        currency: "USD",
-        billingFrequency: "Monthly", // Could be "Monthly", "Yearly", etc.
-        paymentMethod: "Credit Card", // e.g., Credit Card, PayPal, etc.
-        startDate: "2022-06-15", // Subscription start date
-        renewalType: "Automatic", // Could be "Automatic" or "Manual"
-        notes: "Shared with family",
-        status: "Active", // Could be "Active", "Paused", or "Canceled"
-    },
-    {
-        id: 2,
-        name: "Spotify",
-        category: "Music",
-        cost: 9.99,
-        currency: "USD",
-        billingFrequency: "Monthly",
-        paymentMethod: "PayPal",
-        startDate: "2021-11-01",
-        renewalType: "Automatic",
-        notes: "Student discount applied",
-        status: "Active",
-    },
-    {
-        id: 3,
-        name: "Amazon Prime",
-        category: "Shopping",
-        cost: 139.00,
-        currency: "USD",
-        billingFrequency: "Yearly",
-        paymentMethod: "Credit Card",
-        startDate: "2019-12-01",
-        renewalType: "Automatic",
-        notes: "Includes Prime Video",
-        status: "Active",
-    },
-    {
-        id: 4,
-        name: "Adobe Creative Cloud",
-        category: "Software",
-        cost: 54.99,
-        currency: "USD",
-        billingFrequency: "Monthly",
-        paymentMethod: "Credit Card",
-        startDate: "2023-03-01",
-        renewalType: "Manual",
-        notes: "Used for video editing and design work",
-        status: "Active",
-    },
-    {
-        id: 5,
-        name: "Gym Membership",
-        category: "Health & Fitness",
-        cost: 50.00,
-        currency: "USD",
-        billingFrequency: "Monthly",
-        paymentMethod: "Debit Card",
-        startDate: "2020-01-15",
-        renewalType: "Automatic",
-        notes: "Access to multiple locations",
-        status: "Paused",
-    },
-    {
-        id: 6,
-        name: "Domain Hosting (GoDaddy)",
-        category: "Web Services",
-        cost: 12.00,
-        currency: "USD",
-        billingFrequency: "Yearly",
-        paymentMethod: "Credit Card",
-        startDate: "2021-08-20",
-        renewalType: "Automatic",
-        notes: "Used for personal blog",
-        status: "Active",
-    },
-]
+    if (Number.isNaN(trialDate.getTime())) {
+        return null
+    }
+
+    return Math.ceil((trialDate.getTime() - Date.now()) / DAY_IN_MS)
+}
+
+export function getUpcomingBills(subscriptions = [], windowInDays = 30) {
+    return subscriptions
+        .filter((subscription) => subscription.status === "Active")
+        .map((subscription) => {
+            const nextBillingDate = getNextBillingDate(subscription.startDate, subscription.billingFrequency)
+            const daysUntilCharge = nextBillingDate ? Math.ceil((nextBillingDate.getTime() - Date.now()) / DAY_IN_MS) : null
+
+            return {
+                ...subscription,
+                nextBillingDate,
+                daysUntilCharge,
+                monthlyCost: getMonthlyCost(subscription),
+            }
+        })
+        .filter((subscription) => subscription.daysUntilCharge !== null && subscription.daysUntilCharge <= windowInDays)
+        .sort((a, b) => a.daysUntilCharge - b.daysUntilCharge)
+}
+
+export function getCategoryBreakdown(subscriptions = []) {
+    const bucket = {}
+
+    subscriptions
+        .filter((subscription) => subscription.status === "Active")
+        .forEach((subscription) => {
+            const category = subscription.category || "Other"
+            bucket[category] = (bucket[category] || 0) + getMonthlyCost(subscription)
+        })
+
+    return Object.entries(bucket)
+        .map(([category, total]) => ({ category, total }))
+        .sort((a, b) => b.total - a.total)
+}
+
+export function getSavingsOpportunities(subscriptions = []) {
+    return subscriptions
+        .filter((subscription) => subscription.status !== "Active" || subscription.renewalType === "Manual")
+        .map((subscription) => ({
+            ...subscription,
+            monthlySavings: getMonthlyCost(subscription),
+        }))
+        .sort((a, b) => b.monthlySavings - a.monthlySavings)
+}
+
+export function calculateSubscriptionMetrics(subscriptions = []) {
+    // This is the main analytics aggregator for the dashboard cards and summary widgets.
+    const activeSubscriptions = subscriptions.filter((subscription) => subscription.status === "Active")
+    const upcomingBills = getUpcomingBills(subscriptions, 7)
+    const savingsOpportunities = getSavingsOpportunities(subscriptions)
+    const categoryBreakdown = getCategoryBreakdown(subscriptions)
+    const totalMonthlyCost = activeSubscriptions.reduce((total, subscription) => total + getMonthlyCost(subscription), 0)
+    const totalYearlyCost = activeSubscriptions.reduce((total, subscription) => total + getYearlyCost(subscription), 0)
+    const averageMonthlySpending = activeSubscriptions.length ? totalMonthlyCost / activeSubscriptions.length : 0
+    const mostExpensiveSubscription = [...activeSubscriptions].sort((a, b) => Number(b.cost) - Number(a.cost))[0]
+    const trialEndingSoonCount = subscriptions.filter((subscription) => {
+        const daysRemaining = getTrialDaysRemaining(subscription.trialEndDate)
+        return daysRemaining !== null && daysRemaining >= 0 && daysRemaining <= 7
+    }).length
+
+    return {
+        totalMonthlyCost,
+        totalYearlyCost,
+        averageMonthlySpending,
+        activeSubscriptions: activeSubscriptions.length,
+        pausedSubscriptions: subscriptions.filter((subscription) => subscription.status === "Paused").length,
+        cancelledSubscriptions: subscriptions.filter((subscription) => subscription.status === "Cancelled").length,
+        upcomingBillingCount: upcomingBills.length,
+        trialEndingSoonCount,
+        topSpendingCategory: categoryBreakdown[0]?.category || "None",
+        potentialMonthlySavings: savingsOpportunities.reduce((total, subscription) => total + subscription.monthlySavings, 0),
+        mostExpensiveSubscription: mostExpensiveSubscription?.name || "None",
+    }
+}
+
+export function filterSubscriptions(subscriptions = [], filters = {}) {
+    const search = filters.search?.trim().toLowerCase() || ""
+
+    return subscriptions.filter((subscription) => {
+        const matchesSearch =
+            !search ||
+            subscription.name.toLowerCase().includes(search) ||
+            subscription.notes.toLowerCase().includes(search) ||
+            subscription.category.toLowerCase().includes(search)
+        const matchesStatus = filters.status === "All" || !filters.status || subscription.status === filters.status
+        const matchesCategory = filters.category === "All" || !filters.category || subscription.category === filters.category
+        const matchesBilling =
+            filters.billingFrequency === "All" ||
+            !filters.billingFrequency ||
+            subscription.billingFrequency === filters.billingFrequency
+
+        return matchesSearch && matchesStatus && matchesCategory && matchesBilling
+    })
+}
+
+export function sortSubscriptions(subscriptions = [], sortBy = "nextCharge") {
+    const sorted = [...subscriptions]
+
+    switch (sortBy) {
+        case "highestCost":
+            return sorted.sort((a, b) => Number(b.cost) - Number(a.cost))
+        case "lowestCost":
+            return sorted.sort((a, b) => Number(a.cost) - Number(b.cost))
+        case "name":
+            return sorted.sort((a, b) => a.name.localeCompare(b.name))
+        case "recentlyAdded":
+            return sorted.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+        case "nextCharge":
+        default:
+            return sorted.sort((a, b) => {
+                const aDate = getNextBillingDate(a.startDate, a.billingFrequency)
+                const bDate = getNextBillingDate(b.startDate, b.billingFrequency)
+
+                if (!aDate && !bDate) {
+                    return a.name.localeCompare(b.name)
+                }
+
+                if (!aDate) {
+                    return 1
+                }
+
+                if (!bDate) {
+                    return -1
+                }
+
+                return aDate.getTime() - bDate.getTime()
+            })
+    }
+}
+
+export function parseCsvSubscriptions(csvText = "") {
+    const [headerLine, ...rows] = csvText.trim().split(/\r?\n/)
+
+    if (!headerLine) {
+        return []
+    }
+
+    const headers = headerLine.split(",").map((header) => header.trim())
+
+    return rows
+        .filter(Boolean)
+        .map((row) => {
+            // This regex preserves quoted commas so notes like "TV, movies, and music" stay intact.
+            const values = row.match(/(".*?"|[^",]+)(?=\s*,|\s*$)/g) || []
+            const record = headers.reduce((accumulator, header, index) => {
+                const cleanedValue = values[index]?.replace(/^"|"$/g, "").replace(/""/g, '"') || ""
+                accumulator[header] = cleanedValue
+                return accumulator
+            }, {})
+
+            return normalizeSubscription(record)
+        })
+}
+
+export function convertSubscriptionsToCsv(subscriptions = []) {
+    const headers = [
+        "name",
+        "category",
+        "cost",
+        "currency",
+        "billingFrequency",
+        "paymentMethod",
+        "startDate",
+        "renewalType",
+        "trialEndDate",
+        "status",
+        "alertBeforeDays",
+        "notes",
+    ]
+
+    const escapeValue = (value) => `"${String(value ?? "").replace(/"/g, '""')}"`
+
+    const lines = subscriptions.map((subscription) =>
+        headers.map((header) => escapeValue(subscription[header])).join(",")
+    )
+
+    return [headers.join(","), ...lines].join("\n")
+}
