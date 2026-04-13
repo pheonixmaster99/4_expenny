@@ -1,24 +1,24 @@
 'use client'
 
 import { auth, db } from "@/firebase"
-import { subscriptions } from "@/utils"
+import { normalizeSubscription, normalizeSubscriptions } from "@/utils"
 import { createUserWithEmailAndPassword, onAuthStateChanged, signInWithEmailAndPassword, signOut } from "firebase/auth"
 import { doc, getDoc, setDoc } from "firebase/firestore"
-import { createContext, useContext, useState, useEffect } from "react"
+import { createContext, useContext, useEffect, useState } from "react"
 
 const AuthContext = createContext()
 
-// setup a hook, where the intention of the hook is that any component where we call this in, we're going to use the context function (useContext) and pass in the particular context. This will give us a global state.
 export function useAuth() {
     return useContext(AuthContext)
 }
 
 export function AuthProvider(props) {
     const { children } = props
-
+    // This provider is the app's shared auth + subscription store.
+    // Any component inside it can read the same user/session data with useAuth().
     const [currentUser, setCurrentUser] = useState(null)
-    const [userData, setUserData] = useState(null)
-    const [loading, setLoading] = useState(false)
+    const [userData, setUserData] = useState({ subscriptions: [] })
+    const [loading, setLoading] = useState(true)
 
     function signup(email, password) {
         return createUserWithEmailAndPassword(auth, email, password)
@@ -28,95 +28,119 @@ export function AuthProvider(props) {
         return signInWithEmailAndPassword(auth, email, password)
     }
 
-    function logout() {
+    async function logout() {
         setCurrentUser(null)
-        setUserData(null)
+        setUserData({ subscriptions: [] })
         return signOut(auth)
     }
 
-    async function saveToFirebase(data) {
-        try {
-            const usersRef = doc(db, 'users', currentUser.uid)
-            const res = await setDoc(usersRef, {
-                subscriptions: data
-            }, { merge: true} )
-
-        } catch (err) {
-            console.log(err.message)
+    async function saveToFirebase(subscriptions) {
+        if (!currentUser) {
+            return
         }
 
-    }
-    async function handleAddSubscription(newSubscription) {
-        
-        if (userData.subscriptions.length > 30) { return }
-        // modify the local state (global context)
-        // Ensure `subscriptions` stays an array by appending the new subscription to the existing array,
-        // because the component expects an array for `.map()` and will break if it’s a single object.
-        const newSubscriptions = [...userData.subscriptions, newSubscription]
-
-        // Update the local state with the new subscriptions array while preserving other userData properties. 
-        setUserData(prev => ({...prev, subscriptions: [...(prev.subscriptions || []), newSubscription],}));
-
-        // setUserData({ subscriptions: newSubscription })
-        
-        // write the changes to our firbase database (asynchronous)
-        await saveToFirebase(newSubscriptions)
-
-
+        try {
+            const usersRef = doc(db, "users", currentUser.uid)
+            await setDoc(
+                usersRef,
+                {
+                    subscriptions: normalizeSubscriptions(subscriptions),
+                },
+                { merge: true }
+            )
+        } catch (err) {
+            console.log(err.message)
+            throw err
+        }
     }
 
-    async function handleDeleteSubscription(index) {
-        // delete the entry at that index
-        const newSubscriptions = userData.subscriptions.filter((val, valIndex) => {
-            return valIndex != index
+    async function handleUpsertSubscription(subscription) {
+        const nextSubscription = normalizeSubscription(subscription)
+
+        setUserData((previous) => {
+            const subscriptions = previous?.subscriptions || []
+            const existingIndex = subscriptions.findIndex((entry) => entry.id === nextSubscription.id)
+            const updatedSubscriptions =
+                existingIndex >= 0
+                    ? subscriptions.map((entry, index) => (index === existingIndex ? nextSubscription : entry))
+                    : [...subscriptions, nextSubscription]
+
+            // Update the UI immediately, then persist the same result to Firestore in the background.
+            void saveToFirebase(updatedSubscriptions)
+
+            return {
+                ...previous,
+                subscriptions: updatedSubscriptions,
+            }
         })
-        setUserData({ subscriptions: newSubscriptions })
+    }
 
-        await saveToFirebase(newSubscriptions)
+    async function handleDeleteSubscription(subscriptionId) {
+        setUserData((previous) => {
+            const subscriptions = previous?.subscriptions || []
+            const updatedSubscriptions = subscriptions.filter((subscription) => subscription.id !== subscriptionId)
+
+            void saveToFirebase(updatedSubscriptions)
+
+            return {
+                ...previous,
+                subscriptions: updatedSubscriptions,
+            }
+        })
+    }
+
+    async function handleReplaceSubscriptions(subscriptions) {
+        // Used by CSV import to replace the current in-memory list with a freshly normalized one.
+        const normalized = normalizeSubscriptions(subscriptions)
+        setUserData((previous) => ({
+            ...previous,
+            subscriptions: normalized,
+        }))
+        await saveToFirebase(normalized)
     }
 
     useEffect(() => {
-        const unsubscribe = onAuthStateChanged(auth, async user => {
-            try {
-                setCurrentUser(user)
+        const unsubscribe = onAuthStateChanged(auth, async (user) => {
+            setCurrentUser(user)
 
-                if (!user) { return }
-
-
-                // oh we found a user, let's check the database. 
-                setLoading(true)
-                const docRef = doc(db, 'users', user.uid)
-                // Since we have a document Reference, let's see what the reference looks like and return that. 
-                const docSnap = await getDoc(docRef)
-                console.log('fetching user data')
-                // let firebaseData = {subscriptions}
-                let firebaseData = { subscriptions: []} // this is the default data for a new user
-
-                // let firebaseData = { subscriptions: [] } // this is the default data for a new user
-                if (docSnap.exists()) {
-                    // oh we found data cool
-                    console.log('Found user data')
-                    firebaseData = docSnap.data()
-                }
-                setUserData(firebaseData)
+            if (!user) {
+                setUserData({ subscriptions: [] })
                 setLoading(false)
-            } catch(err) {
+                return
+            }
+
+            try {
+                setLoading(true)
+                const docRef = doc(db, "users", user.uid)
+                const docSnap = await getDoc(docRef)
+                const firebaseData = docSnap.exists() ? docSnap.data() : { subscriptions: [] }
+
+                // Older records may not have ids/timestamps yet, so normalize everything on read.
+                setUserData({
+                    subscriptions: normalizeSubscriptions(firebaseData.subscriptions || []),
+                })
+            } catch (err) {
                 console.log(err.message)
+                setUserData({ subscriptions: [] })
+            } finally {
+                setLoading(false)
             }
         })
+
         return unsubscribe
     }, [])
-    // Value passed into the currentUser and other variables, and the creation of a corresponding key-value pair
-    // The variables and functions in this object, are now accessible in any component via our global context. 
+
     const value = {
-        currentUser, userData, loading, signup, login, logout, handleAddSubscription, handleDeleteSubscription
+        currentUser,
+        userData,
+        loading,
+        signup,
+        login,
+        logout,
+        handleUpsertSubscription,
+        handleDeleteSubscription,
+        handleReplaceSubscriptions,
     }
 
-    return (
-        <AuthContext.Provider value={value}>
-            {children}
-        </AuthContext.Provider>
-    )
-
-
+    return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }

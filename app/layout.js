@@ -1,28 +1,29 @@
-import "./globals.css";
+import "./globals.css"
 import "./fanta.css"
 import Head from "./Head"
 import Link from "next/link"
-import GoTo from "@/components/GoTo";
-import { AuthProvider } from "@/context/AuthContext";
+import GoTo from "@/components/GoTo"
+import { AuthProvider } from "@/context/AuthContext"
 
 export const metadata = {
-  title: "Expenny ⋅ The Subscription Tracker",
-  description: "Track all your subscription analytics!",
-};
+  title: "Expenny | Subscription Tracker",
+  description: "Track recurring subscriptions, upcoming bills, and savings opportunities in one dashboard.",
+  manifest: "/manifest.webmanifest",
+}
 
 export default function RootLayout({ children }) {
   const header = (
     <header>
       <div>
-        <Link href={'/'}>
+        <Link href="/">
           <h1 className="text-gradient">Expenny</h1>
         </Link>
-        <p>The Subscription Tracker</p>
+        <p>The subscription tracker</p>
       </div>
-      <GoTo /> 
-
+      <GoTo />
     </header>
   )
+
   const footer = (
     <footer>
       <div className="hard-line" />
@@ -31,35 +32,33 @@ export default function RootLayout({ children }) {
           <div>
             <h4>Expenny</h4>
             <p>|</p>
-            <button disabled>Install app</button>
+            <button disabled>PWA ready</button>
           </div>
-          <p className="copyright">© Copyright 2024-2025, Khamosh Mehta.<br />All 
-          rights reserved.</p>
+          <p className="copyright">Copyright 2024-2026, Khamosh Mehta. Built to make subscription tracking simpler.</p>
         </div>
         <div>
-          <p>Facing Issues? <a>Get help</a></p>
-          <p>Suggestions for improvement? <a>Share feedback</a></p>
+          <p>Facing issues? The dashboard now includes import/export and better billing visibility.</p>
+          <p>Want more? Next up could be reminders, charts, and team sharing.</p>
           <div>
-            <Link href={'/privacy'}>Privacy Policy</Link>
-            <Link href={'/tos'}>Terms of Service</Link> 
+            <Link href="/privacy">Privacy Policy</Link>
+            <Link href="/tos">Terms of Service</Link>
           </div>
         </div>
-      </div> 
+      </div>
     </footer>
   )
+
   return (
     <html lang="en">
       <Head />
-      <AuthProvider>
-        <body >
+      <body>
+        <AuthProvider>
           {header}
           <div className="full-line" />
-          <main>
-            {children}
-          </main>
+          <main>{children}</main>
           {footer}
-        </body>
-      </AuthProvider>
+        </AuthProvider>
+      </body>
     </html>
-  );
+  )
 }

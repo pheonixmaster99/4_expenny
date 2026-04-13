@@ -1,114 +1,159 @@
 'use client'
 
-import { useAuth } from "@/context/AuthContext"
-import { useState } from "react"
+import {
+    BILLING_FREQUENCY_OPTIONS,
+    CATEGORY_OPTIONS,
+    CURRENCY_OPTIONS,
+    PAYMENT_METHOD_OPTIONS,
+    RENEWAL_OPTIONS,
+    STATUS_OPTIONS,
+} from "@/utils"
 
-export default function SuscriptionForm(props) {
-    const { onSubmit, closeInput, formData, handleChangeInput, handleResetForm } = props
-    const { handleAddSubscription } = useAuth()
+export default function SubscriptionForm(props) {
+    const { closeInput, formData, handleChangeInput, handleResetForm, onSubmit, isEditing } = props
 
     function handleFormSubmit(e) {
-        e.preventDefault() //prevents the random as behaviour of reloading the webpage.
-        handleAddSubscription(formData)
-        handleResetForm()
-        closeInput()
+        e.preventDefault()
+        // The parent decides how to save so this form can stay focused on collecting input only.
+        onSubmit()
     }
 
     return (
-        <section>
-            <h2>Add a new subscription</h2>
-            
+        <section className="form-shell card">
+            <div className="section-heading">
+                <div>
+                    <p className="eyebrow">Subscription Details</p>
+                    <h2>{isEditing ? "Update subscription" : "Add a new subscription"}</h2>
+                </div>
+                <button type="button" onClick={closeInput}>
+                    Close
+                </button>
+            </div>
+
             <form onSubmit={handleFormSubmit}>
+                {/* Every field reads and writes from the shared formData object.
+                    That keeps the form predictable and makes edit mode easy to support. */}
                 <label>
-                    <span>Subscription Name</span>
-                    <input value={formData.name} onChange={handleChangeInput} type="text" name="name" placeholder="e.g. Netflix, Spotify, AWS Hosting" required />
+                    <span>Subscription name</span>
+                    <input
+                        value={formData.name}
+                        onChange={handleChangeInput}
+                        type="text"
+                        name="name"
+                        placeholder="e.g. Netflix, Spotify, AWS Hosting"
+                        required
+                    />
                 </label>
 
                 <label>
                     <span>Category</span>
                     <select value={formData.category} onChange={handleChangeInput} name="category">
-                        {['Entertainment', 'Music', 'Software', 'Web Services', 'Health & Fitness', 'Other'].map((cat, catIndex) => {
-                            return (
-                                <option key={catIndex}>
-                                    {cat}
-                                </option>
-                            )
-                        })}
+                        {CATEGORY_OPTIONS.map((category) => (
+                            <option key={category}>{category}</option>
+                        ))}
                     </select>
                 </label>
-                
+
                 <label>
                     <span>Cost</span>
-                    <input value={formData.cost} onChange={handleChangeInput} type="number" name="cost" step="0.01" placeholder="e.g. 12.00" required />
+                    <input
+                        value={formData.cost}
+                        onChange={handleChangeInput}
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        name="cost"
+                        placeholder="e.g. 12.00"
+                        required
+                    />
                 </label>
 
                 <label>
                     <span>Currency</span>
                     <select value={formData.currency} onChange={handleChangeInput} name="currency">
-                        {['USD','EUR','GBP','NZD','AUD','Other'].map((cur, curIndex) => {
-                            return(
-                                <option key={curIndex}>
-                                    {cur}
-                                </option>
-                            )
-                        })}
+                        {CURRENCY_OPTIONS.map((currency) => (
+                            <option key={currency}>{currency}</option>
+                        ))}
                     </select>
                 </label>
 
                 <label>
-                    <span>Billing Frequency</span>
+                    <span>Billing frequency</span>
                     <select value={formData.billingFrequency} onChange={handleChangeInput} name="billingFrequency">
-                        {['Monthly','Yearly','Quarterly','One-time'].map((cur, curIndex) => {
-                            return(
-                                <option key={curIndex}>
-                                    {cur}
-                                </option>
-                            )
-                        })}
-                    </select>
-                </label>
-                
-                <label>
-                    <span>Payment Method</span>
-                    <select value={formData.paymentMethod} onChange={handleChangeInput} name="paymentMethod">
-                        {['Credit Card','Debit Card','Paypal','Bank Transfer','Other'].map((cur, curIndex) => {
-                            return(
-                                <option key={curIndex}>
-                                    {cur}
-                                </option>
-                            )
-                        })}
+                        {BILLING_FREQUENCY_OPTIONS.map((frequency) => (
+                            <option key={frequency}>{frequency}</option>
+                        ))}
                     </select>
                 </label>
 
                 <label>
-                    <span>Subscription Start Date</span>
+                    <span>Payment method</span>
+                    <select value={formData.paymentMethod} onChange={handleChangeInput} name="paymentMethod">
+                        {PAYMENT_METHOD_OPTIONS.map((method) => (
+                            <option key={method}>{method}</option>
+                        ))}
+                    </select>
+                </label>
+
+                <label>
+                    <span>Subscription start date</span>
                     <input value={formData.startDate} onChange={handleChangeInput} type="date" name="startDate" required />
                 </label>
 
                 <label>
                     <span>Status</span>
                     <select value={formData.status} onChange={handleChangeInput} name="status">
-                        {['Active','Paused','Cancelled'].map((cur, curIndex) => {
-                            return(
-                                <option key={curIndex}>
-                                    {cur}
-                                </option>
-                            )
-                        })}
+                        {STATUS_OPTIONS.map((status) => (
+                            <option key={status}>{status}</option>
+                        ))}
                     </select>
+                </label>
+
+                <label>
+                    <span>Renewal type</span>
+                    <select value={formData.renewalType} onChange={handleChangeInput} name="renewalType">
+                        {RENEWAL_OPTIONS.map((option) => (
+                            <option key={option}>{option}</option>
+                        ))}
+                    </select>
+                </label>
+
+                <label>
+                    <span>Reminder lead time (days)</span>
+                    <input
+                        value={formData.alertBeforeDays}
+                        onChange={handleChangeInput}
+                        type="number"
+                        min="0"
+                        max="30"
+                        name="alertBeforeDays"
+                    />
+                </label>
+
+                <label>
+                    <span>Trial end date</span>
+                    <input value={formData.trialEndDate} onChange={handleChangeInput} type="date" name="trialEndDate" />
                 </label>
 
                 <label className="fat-column">
                     <span>Notes</span>
-                    <textarea value={formData.notes} onChange={handleChangeInput} name="notes" placeholder="e.g. Shared with family, includes cloud storage" />
+                    <textarea
+                        value={formData.notes}
+                        onChange={handleChangeInput}
+                        name="notes"
+                        placeholder="e.g. Shared with family, includes cloud storage"
+                        rows="4"
+                    />
                 </label>
 
                 <div className="fat-column form-submit-btns">
-                    <button onClick={closeInput}>Cancel</button>
-                    <button type="submit">
-                        Add Subscription
+                    <button type="button" onClick={closeInput}>
+                        Cancel
                     </button>
+                    <button type="button" onClick={handleResetForm}>
+                        Reset
+                    </button>
+                    <button type="submit">{isEditing ? "Save changes" : "Add subscription"}</button>
                 </div>
             </form>
         </section>

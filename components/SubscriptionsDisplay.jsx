@@ -1,77 +1,94 @@
-import { useAuth } from "@/context/AuthContext"
-import { getDaysUntilNextCharge, subscriptions } from "@/utils";
+import { formatCurrency, formatDate, getDaysUntilNextCharge, getNextBillingDate } from "@/utils"
 
 export default function SubscriptionsDisplay(props) {
-    const { handleShowInput, handleEditSubscription } = props
-    const { handleDeleteSubscription, userData } = useAuth()
-
-    if (!userData?.subscriptions) { return null }
-    console.log("userData.subscriptions: ", userData.subscriptions)
+    const { subscriptions, onAdd, onDelete, onEdit } = props
 
     return (
         <section>
-            <h2>Your Subscriptions</h2>
-
-            <div className="card-container">
-
-                {userData.subscriptions.map((sub, subIndex) => {
-                    const { name, category, cost, currency, billingFrequency, startDate, notes, status } = sub
-
-                    return (
-                        <div key={subIndex} className="card subscription-card">
-                            <div>
-                                <h3>{name}</h3>
-                                <div className={'status ' + (status === 'Active' ? 'card-button-primary' : 'card-button-secondary')}>
-                                    <small>{status}</small>
-                                </div>
-                            </div>
-
-                            <p><i>{category}</i></p>
-
-                            <div className="sub-cost">
-                                <h2>${cost}</h2>
-                                <p>{currency}</p>
-                            </div>
-                            <small>per {billingFrequency}</small>
-
-
-                            <div className="sub-renewal">
-                                <div> 
-                                    <p>Started</p>
-                                    <h4>{startDate}</h4>
-                                </div>
-                                <div>
-                                    <p>Due</p>
-                                    <h4>{getDaysUntilNextCharge(startDate, billingFrequency)}</h4>
-                                </div>
-
-                            </div>
-
-                            <div className="white-line" />
-                            <p>{notes}</p>
-                            <div className="subscription-actions"> 
-                                <button onClick={() => {
-                                    handleEditSubscription(subIndex)
-                                }} className="button-card">
-                                    <i className="fa-solid fa-pen-to-square"></i>
-                                    Edit
-                                </button>
-                                <button onClick={() => {
-                                    handleDeleteSubscription(subIndex)
-                                }} className="button-card">
-                                    <i className="fa-solid fa-trash"></i>
-                                    Delete
-                                </button>
-                            </div>
-                        </div>
-                    )
-                })}
-
-                <button onClick={handleShowInput} className="button-card add-subscriptions">
-                    <i className="fa-solid fa-plus"></i>
-                        <h5>Add new subscription</h5>
-                </button>
+            <div className="section-heading">
+                <div>
+                    <p className="eyebrow">Library</p>
+                    <h2>Your subscriptions</h2>
+                </div>
+                <button onClick={onAdd}>Add subscription</button>
             </div>
+
+            {!subscriptions.length ? (
+                <div className="card empty-state">
+                    <h3>No subscriptions match these filters</h3>
+                    <p>Try clearing your filters or add a new subscription to start building your dashboard.</p>
+                    <button onClick={onAdd}>Add your first subscription</button>
+                </div>
+            ) : (
+                <div className="card-container">
+                    {subscriptions.map((subscription) => {
+                        // These values are calculated per card so each item can explain its own renewal timing.
+                        const nextBillingDate = getNextBillingDate(subscription.startDate, subscription.billingFrequency)
+                        const daysUntilCharge = getDaysUntilNextCharge(subscription.startDate, subscription.billingFrequency)
+
+                        return (
+                            <article key={subscription.id} className="card subscription-card">
+                                <div className="subscription-card-top">
+                                    <div>
+                                        <h3>{subscription.name}</h3>
+                                        <p>{subscription.category}</p>
+                                    </div>
+                                    <div
+                                        className={`status ${
+                                            subscription.status === "Active" ? "card-button-primary" : "card-button-secondary"
+                                        }`}
+                                    >
+                                        <small>{subscription.status}</small>
+                                    </div>
+                                </div>
+
+                                <div className="sub-cost">
+                                    <h2>{formatCurrency(subscription.cost, subscription.currency)}</h2>
+                                    <p>{subscription.billingFrequency}</p>
+                                </div>
+
+                                <div className="subscription-meta-grid">
+                                    <div>
+                                        <p>Started</p>
+                                        <h4>{formatDate(subscription.startDate)}</h4>
+                                    </div>
+                                    <div>
+                                        <p>Next bill</p>
+                                        <h4>{nextBillingDate ? formatDate(nextBillingDate) : "No renewal"}</h4>
+                                    </div>
+                                    <div>
+                                        <p>Charge in</p>
+                                        <h4>{typeof daysUntilCharge === "number" ? `${daysUntilCharge} days` : daysUntilCharge}</h4>
+                                    </div>
+                                    <div>
+                                        <p>Renewal</p>
+                                        <h4>{subscription.renewalType}</h4>
+                                    </div>
+                                </div>
+
+                                <div className="white-line" />
+
+                                <div className="card-detail-stack">
+                                    <p>
+                                        <strong>Payment:</strong> {subscription.paymentMethod}
+                                    </p>
+                                    {subscription.trialEndDate && (
+                                        <p>
+                                            <strong>Trial ends:</strong> {formatDate(subscription.trialEndDate)}
+                                        </p>
+                                    )}
+                                    <p className="notes-preview">{subscription.notes || "No notes added yet."}</p>
+                                </div>
+
+                                <div className="subscription-actions">
+                                    <button onClick={() => onEdit(subscription)}>Edit</button>
+                                    <button onClick={() => onDelete(subscription.id)}>Delete</button>
+                                </div>
+                            </article>
+                        )
+                    })}
+                </div>
+            )}
         </section>
     )
 }
